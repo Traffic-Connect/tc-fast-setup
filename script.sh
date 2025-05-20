@@ -33,6 +33,9 @@ echo -e "${YELLOW}=== Очистка системы ===${NC}"
     apt update
 } > /dev/null 2>&1
 
+# Установка временной зоны
+timedatectl set-timezone Europe/Moscow
+
 # 2. Обновление системы и установка базовых пакетов
 echo -e "${YELLOW}=== Установка базовых пакетов ===${NC}"
 apt update && apt upgrade -y
