@@ -38,7 +38,7 @@
 
 1. **Скопируйте или скачайте скрипт на сервер:**
     ```bash
-    wget https://your-repo-url/script.sh -O script.sh
+    git clone https://github.com/Traffic-Connect/tc-fast-setup .
     chmod +x script.sh
     ```
 
@@ -132,7 +132,7 @@
 
 ## 🧑‍💻 Автор
 
-- **Sergey G**
+- **TrafficConnect**
 
 ---
 
