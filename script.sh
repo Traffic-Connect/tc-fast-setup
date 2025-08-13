@@ -42,7 +42,7 @@ apt update && apt upgrade -y
 apt install -y fail2ban iptables-persistent netfilter-persistent curl wget \
                software-properties-common apt-transport-https python3 \
                python3-pip python3-venv git gnupg2 ca-certificates \
-               adduser libfontconfig1 unzip
+               adduser libfontconfig1 unzip ncdu htop
 check_error "Установка базовых пакетов"
 
 # 3. Установка Hestia CP
@@ -52,7 +52,7 @@ echo -e "${YELLOW}=== Установка Hestia CP ===${NC}"
     wget https://raw.githubusercontent.com/hestiacp/hestiacp/release/install/hst-install.sh
     
     echo -e "${BLUE}[Инфо] Запуск установки (это может занять несколько минут)...${NC}"
-    bash hst-install.sh --force
+    bash hst-install.sh --lang 'ru' --hostname 'hostname.domain.tld' --username 'Trafficadmin' --email 'info@domain.tld' --apache no --named no --exim no --dovecot no --clamav no --spamassassin no --force
     
     echo -e "${BLUE}[Инфо] Проверка работы службы...${NC}"
     if systemctl is-active --quiet hestia; then
