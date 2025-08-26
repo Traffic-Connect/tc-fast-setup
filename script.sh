@@ -73,7 +73,7 @@ echo -e "${YELLOW}=== Установка Hestia CP ===${NC}"
 }
 check_error "Установка Hestia CP"
 
-# 4. Настройка iptables
+# 4. Настройка iptables с ограничениями доступа
 echo -e "${YELLOW}=== Настройка firewall ===${NC}"
 iptables -F && iptables -X
 iptables -P INPUT DROP
@@ -84,7 +84,7 @@ iptables -P OUTPUT ACCEPT
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
-# Разрешение HTTP/HTTPS
+# Разрешение HTTP/HTTPS для всех
 iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
@@ -95,17 +95,28 @@ for ip in $(curl -s https://www.cloudflare.com/ips-v4); do
     iptables -A INPUT -p tcp -s "$ip" --dport 443 -j ACCEPT
 done
 
-# Порты Hestia CP и мониторинга
-for port in 22 80 443 8083 3306 5432 8080 25 465 587 993 995 143 110 53 3000 9090 9100 3100 9080 9191 9091; do
-    iptables -A INPUT -p tcp --dport $port -j ACCEPT
+# Разрешение SSH (22) для всех
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+
+# Разрешение доступа ко всем сервисным портам только для указанных IP
+ALL_SERVICE_PORTS="3000 9090 9100 3100 9080 9191 9091 3306 5432 8080 25 465 587 993 995 143 110 53"
+for port in $ALL_SERVICE_PORTS; do
+    # Разрешаем доступ с VPN и сервера статистики
+    iptables -A INPUT -p tcp -s 188.68.219.28 --dport $port -j ACCEPT
+    iptables -A INPUT -p tcp -s 172.235.190.62 --dport $port -j ACCEPT
+    # Запрещаем доступ для всех остальных
+    iptables -A INPUT -p tcp --dport $port -j DROP
 done
-iptables -A INPUT -p udp --dport 53 -j ACCEPT  # DNS UDP
+
+# Разрешение DNS UDP только для локальных запросов
+iptables -A INPUT -p udp -s 127.0.0.1 --dport 53 -j ACCEPT
+iptables -A INPUT -p udp --dport 53 -j DROP
 
 # Защита от атак
 iptables -N SYN_FLOOD
 iptables -A INPUT -p tcp --syn -j SYN_FLOOD
 iptables -A SYN_FLOOD -m limit --limit 10/s --limit-burst 25 -j RETURN
-iptables -A SYN_FLOOD -j DROP
+iptables -A SYN_FLOOG -j DROP
 
 iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
 iptables -A INPUT -p icmp --icmp-type echo-request -j DROP
@@ -184,7 +195,7 @@ check_error "Настройка fail2ban"
 # 6. Установка Grafana
 echo -e "${YELLOW}=== Установка Grafana ===${NC}"
 {
-    wget https://dl.grafana.com/oss/release/grafana_10.4.3_amd64.deb -O /tmp/grafana.deb
+    wget https://dl.grafana.com/oss/release/grafana_12.0.2_amd64.deb -O /tmp/grafana.deb
     dpkg -i /tmp/grafana.deb || apt-get install -fy
     rm -f /tmp/grafana.deb
     systemctl daemon-reload
@@ -341,6 +352,10 @@ auth_enabled: false
 server:
   http_listen_port: 3100
   grpc_listen_port: 9096
+  http_server_read_timeout: 5m
+  http_server_write_timeout: 5m
+  grpc_server_max_recv_msg_size: 104857600  # 100MB
+  grpc_server_max_send_msg_size: 104857600  # 100MB
 
 common:
   path_prefix: /var/lib/loki
@@ -368,6 +383,14 @@ limits_config:
   enforce_metric_name: false
   reject_old_samples: true
   reject_old_samples_max_age: 168h
+  query_timeout: 5m  # Явно устанавливаем 5 минут
+  max_query_length: 168h
+  max_query_parallelism: 32
+  max_streams_matchers_per_query: 1000
+  max_concurrent_tail_requests: 10
+  max_entries_limit_per_query: 5000
+  max_chunks_per_query: 2000000
+  max_query_series: 500
 
 chunk_store_config:
   max_look_back_period: 0s
@@ -378,6 +401,9 @@ table_manager:
 
 ruler:
   alertmanager_url: http://localhost:9093
+
+query_scheduler:
+  max_outstanding_requests_per_tenant: 100
 EOF
 
     cat > /etc/systemd/system/loki.service <<EOF
@@ -536,4 +562,4 @@ echo -e "Pushgateway:  http://$(hostname -I | awk '{print $1}'):9091"
 echo -e "\n${GREEN}Данные для входа:${NC}"
 echo -e "Hestia CP:  admin / (пароль из файла /usr/local/hestia/data/users/admin/password.conf)"
 echo -e "Grafana:    admin / admin"
-echo -e "\n${RED}ВАЖНО: \Cмените пароли${NC}"
+echo -e "\n${RED}ВАЖНО: Измените пароли по умолчанию${NC}"
