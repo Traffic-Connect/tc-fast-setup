@@ -99,7 +99,7 @@ done
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 
 # Разрешение доступа ко всем сервисным портам только для указанных IP
-ALL_SERVICE_PORTS="3000 9090 9100 3100 9080 9191 9091 3306 5432 8080 25 465 587 993 995 143 110 53"
+ALL_SERVICE_PORTS="3000 9090 9100 3100 9080 9191 9091 3306 5432 8080 8083 25 465 587 993 995 143 110 53"
 for port in $ALL_SERVICE_PORTS; do
     # Разрешаем доступ с VPN и сервера статистики
     iptables -A INPUT -p tcp -s 188.68.219.28 --dport $port -j ACCEPT
