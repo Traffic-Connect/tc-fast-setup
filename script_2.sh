@@ -45,6 +45,7 @@ iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 # Разрешение HTTP/HTTPS для всех
 iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -p tcp --dport 8083 -j ACCEPT
 
 # Разрешение Cloudflare IPs
 echo -e "${BLUE}Добавление правил для Cloudflare...${NC}"
