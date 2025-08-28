@@ -25,12 +25,10 @@ check_error() {
 
 echo -e "${YELLOW}=== ПРИМЕНЕНИЕ ДОПОЛНИТЕЛЬНЫХ НАСТРОЕК БЕЗОПАСНОСТИ ===${NC}"
 
-# 1. Ужесточение правил iptables 
-echo -e "${YELLOW}1. Настройка строгого firewall...${NC}"
+# 1. Правила iptables 
+echo -e "${YELLOW}1. Настройка firewall...${NC}"
 
-# Очищаем текущие правила
-iptables -F
-iptables -X
+iptables -F && iptables -X
 iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
@@ -38,9 +36,6 @@ iptables -P OUTPUT ACCEPT
 # Базовые правила
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-# Разрешение SSH для всех
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 
 # Разрешение HTTP/HTTPS для всех
 iptables -A INPUT -p tcp --dport 80 -j ACCEPT
@@ -54,7 +49,10 @@ for ip in $(curl -s https://www.cloudflare.com/ips-v4); do
     iptables -A INPUT -p tcp -s "$ip" --dport 443 -j ACCEPT
 done
 
-echo -e "${BLUE}Ограничение доступа к сервисным портам (кроме 22 и 8083)...${NC}"
+# Разрешение SSH (22) для всех
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+
+# Разрешение доступа ко всем сервисным портам только для указанных IP
 ALL_SERVICE_PORTS="3000 9090 9100 3100 9080 9191 9091 3306 5432 8080 25 465 587 993 995 143 110 53"
 for port in $ALL_SERVICE_PORTS; do
     # Разрешаем доступ с VPN и сервера статистики
@@ -68,7 +66,7 @@ done
 iptables -A INPUT -p udp -s 127.0.0.1 --dport 53 -j ACCEPT
 iptables -A INPUT -p udp --dport 53 -j DROP
 
-# Защита от атак (повторяем, так как старые правила сброшены)
+# Защита от атак
 iptables -N SYN_FLOOD
 iptables -A INPUT -p tcp --syn -j SYN_FLOOD
 iptables -A SYN_FLOOD -m limit --limit 10/s --limit-burst 25 -j RETURN
@@ -77,6 +75,7 @@ iptables -A SYN_FLOOD -j DROP
 iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
 iptables -A INPUT -p icmp --icmp-type echo-request -j DROP
 
+# Защита от портовых сканеров
 iptables -N PORT_SCAN
 iptables -A INPUT -p tcp --tcp-flags SYN,ACK,FIN,RST RST -j PORT_SCAN
 iptables -A PORT_SCAN -m limit --limit 1/s -j RETURN
