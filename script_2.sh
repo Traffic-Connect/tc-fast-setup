@@ -83,7 +83,7 @@ iptables -A PORT_SCAN -j DROP
 
 # Сохраняем правила
 netfilter-persistent save
-check_error "Настройка строгого firewall"
+check_error "Настройка firewall"
 
 # 2. Добавляем недостающие параметры в конфиг Loki для стабильности
 echo -e "${YELLOW}2. Улучшение конфигурации Loki...${NC}"
