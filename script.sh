@@ -23,36 +23,23 @@ check_error() {
     fi
 }
 
-# 1. Очистка системы
-echo -e "${YELLOW}=== Очистка системы ===${NC}"
-{
-    systemctl stop grafana-server 2>/dev/null || true
-    apt purge -y grafana* 2>/dev/null || true
-    rm -rf /etc/apt/sources.list.d/grafana* /usr/share/keyrings/grafana.gpg
-    apt autoremove -y
-    apt update
-} > /dev/null 2>&1
-
-# Установка временной зоны
-timedatectl set-timezone Europe/Moscow
-
-# 2. Обновление системы и установка базовых пакетов
+# 1. Обновление системы и установка базовых пакетов
 echo -e "${YELLOW}=== Установка базовых пакетов ===${NC}"
 apt update && apt upgrade -y
 apt install -y fail2ban iptables-persistent netfilter-persistent curl wget \
                software-properties-common apt-transport-https python3 \
                python3-pip python3-venv git gnupg2 ca-certificates \
-               adduser libfontconfig1 unzip ncdu htop
+               adduser libfontconfig1 unzip
 check_error "Установка базовых пакетов"
 
-# 3. Установка Hestia CP
+# 2. Установка Hestia CP
 echo -e "${YELLOW}=== Установка Hestia CP ===${NC}"
 {
     echo -e "${BLUE}[Инфо] Загрузка установочного скрипта...${NC}"
     wget https://raw.githubusercontent.com/hestiacp/hestiacp/release/install/hst-install.sh
     
     echo -e "${BLUE}[Инфо] Запуск установки (это может занять несколько минут)...${NC}"
-    bash hst-install.sh --lang 'ru' --hostname 'hostname.domain.tld' --username 'Trafficadmin' --email 'info@domain.tld' --apache no --named no --exim no --dovecot no --clamav no --spamassassin no --force
+    bash hst-install.sh --force
     
     echo -e "${BLUE}[Инфо] Проверка работы службы...${NC}"
     if systemctl is-active --quiet hestia; then
@@ -73,7 +60,7 @@ echo -e "${YELLOW}=== Установка Hestia CP ===${NC}"
 }
 check_error "Установка Hestia CP"
 
-# 4. Настройка iptables с ограничениями доступа
+# 3. Настройка iptables с ограничениями доступа
 echo -e "${YELLOW}=== Настройка firewall ===${NC}"
 iptables -F && iptables -X
 iptables -P INPUT DROP
@@ -84,10 +71,9 @@ iptables -P OUTPUT ACCEPT
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
-# Разрешение HTTP/HTTPS для всех
+# Разрешение HTTP/HTTPS
 iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-iptables -A INPUT -p tcp --dport 8083 -j ACCEPT
 
 # Разрешение Cloudflare IPs
 echo -e "${BLUE}Добавление правил для Cloudflare...${NC}"
@@ -96,28 +82,31 @@ for ip in $(curl -s https://www.cloudflare.com/ips-v4); do
     iptables -A INPUT -p tcp -s "$ip" --dport 443 -j ACCEPT
 done
 
-# Разрешение SSH (22) для всех
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+# Ограничение доступа к SSH (22) и Hestia CP (8083) только для 188.68.219.28
+iptables -A INPUT -p tcp -s 188.68.219.28 --dport 22 -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j DROP
+iptables -A INPUT -p tcp -s 188.68.219.28 --dport 8083 -j ACCEPT
+iptables -A INPUT -p tcp --dport 8083 -j DROP
 
-# Разрешение доступа ко всем сервисным портам только для указанных IP
-ALL_SERVICE_PORTS="3000 9090 9100 3100 9080 9191 9091 3306 5432 8080 8083 25 465 587 993 995 143 110 53"
-for port in $ALL_SERVICE_PORTS; do
-    # Разрешаем доступ с VPN и сервера статистики
+# Ограничение доступа к мониторинговым портам для указанных IP
+MONITORING_PORTS="3000 9090 9100 3100 9080 9191 9091 9115"
+for port in $MONITORING_PORTS; do
     iptables -A INPUT -p tcp -s 188.68.219.28 --dport $port -j ACCEPT
     iptables -A INPUT -p tcp -s 172.235.190.62 --dport $port -j ACCEPT
-    # Запрещаем доступ для всех остальных
     iptables -A INPUT -p tcp --dport $port -j DROP
 done
 
-# Разрешение DNS UDP только для локальных запросов
-iptables -A INPUT -p udp -s 127.0.0.1 --dport 53 -j ACCEPT
-iptables -A INPUT -p udp --dport 53 -j DROP
+# Остальные порты Hestia CP
+for port in 3306 5432 8080 25 465 587 993 995 143 110 53; do
+    iptables -A INPUT -p tcp --dport $port -j ACCEPT
+done
+iptables -A INPUT -p udp --dport 53 -j ACCEPT  # DNS UDP
 
 # Защита от атак
 iptables -N SYN_FLOOD
 iptables -A INPUT -p tcp --syn -j SYN_FLOOD
 iptables -A SYN_FLOOD -m limit --limit 10/s --limit-burst 25 -j RETURN
-iptables -A SYN_FLOOG -j DROP
+iptables -A SYN_FLOOD -j DROP
 
 iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
 iptables -A INPUT -p icmp --icmp-type echo-request -j DROP
@@ -131,7 +120,7 @@ iptables -A PORT_SCAN -j DROP
 netfilter-persistent save
 check_error "Настройка firewall"
 
-# 5. Настройка fail2ban
+# 4. Настройка fail2ban
 echo -e "${YELLOW}=== Настройка fail2ban ===${NC}"
 cat > /etc/fail2ban/jail.local <<EOL
 [DEFAULT]
@@ -193,7 +182,7 @@ EOL
 systemctl enable --now fail2ban
 check_error "Настройка fail2ban"
 
-# 6. Установка Grafana
+# 5. Установка Grafana
 echo -e "${YELLOW}=== Установка Grafana ===${NC}"
 {
     wget https://dl.grafana.com/oss/release/grafana_12.0.2_amd64.deb -O /tmp/grafana.deb
@@ -205,7 +194,7 @@ echo -e "${YELLOW}=== Установка Grafana ===${NC}"
 } > /dev/null 2>&1
 check_error "Установка Grafana"
 
-# 7. Установка Prometheus
+# 6. Установка Prometheus
 echo -e "${YELLOW}=== Установка Prometheus ===${NC}"
 {
     useradd --no-create-home --shell /bin/false prometheus 2>/dev/null || true
@@ -253,10 +242,10 @@ After=network.target
 User=prometheus
 Group=prometheus
 Type=simple
-ExecStart=/usr/local/bin/prometheus \\
-    --config.file=/etc/prometheus/prometheus.yml \\
-    --storage.tsdb.path=/var/lib/prometheus \\
-    --web.listen-address=0.0.0.0:9090 \\
+ExecStart=/usr/local/bin/prometheus \
+    --config.file=/etc/prometheus/prometheus.yml \
+    --storage.tsdb.path=/var/lib/prometheus \
+    --web.listen-address=0.0.0.0:9090 \
     --web.enable-lifecycle
 
 Restart=always
@@ -273,7 +262,7 @@ EOF
 } > /dev/null 2>&1
 check_error "Установка Prometheus"
 
-# 8. Установка Node Exporter
+# 7. Установка Node Exporter
 echo -e "${YELLOW}=== Установка Node Exporter ===${NC}"
 {
     wget https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz -O /tmp/node_exporter.tar.gz
@@ -302,7 +291,7 @@ EOF
 } > /dev/null 2>&1
 check_error "Установка Node Exporter"
 
-# 9. Установка Pushgateway
+# 8. Установка Pushgateway
 echo -e "${YELLOW}=== Установка Pushgateway ===${NC}"
 {
     wget https://github.com/prometheus/pushgateway/releases/download/v1.6.1/pushgateway-1.6.1.linux-amd64.tar.gz -O /tmp/pushgateway.tar.gz
@@ -319,7 +308,7 @@ After=network.target
 [Service]
 User=pushgateway
 Group=pushgateway
-ExecStart=/usr/local/bin/pushgateway \\
+ExecStart=/usr/local/bin/pushgateway \
     --web.listen-address=:9091
 
 [Install]
@@ -332,7 +321,7 @@ EOF
 } > /dev/null 2>&1
 check_error "Установка Pushgateway"
 
-# 10. Установка Loki и Promtail
+# 9. Установка Loki и Promtail
 echo -e "${YELLOW}=== Установка Loki и Promtail ===${NC}"
 {
     LOKI_VERSION="2.9.1"
@@ -473,7 +462,7 @@ EOF
 } > /dev/null 2>&1
 check_error "Установка Loki и Promtail"
 
-# 11. Настройка экспортера для fail2ban
+# 10. Настройка экспортера для fail2ban
 echo -e "${YELLOW}=== Настройка мониторинга fail2ban ===${NC}"
 {
     apt-get install -y python3-prometheus-client
@@ -522,7 +511,7 @@ EOF
 } > /dev/null 2>&1
 check_error "Настройка мониторинга fail2ban"
 
-# 12. Настройка Grafana
+# 11. Настройка Grafana
 echo -e "${YELLOW}=== Настройка Grafana ===${NC}"
 {
     while ! systemctl is-active --quiet grafana-server; do
@@ -552,6 +541,73 @@ echo -e "${YELLOW}=== Настройка Grafana ===${NC}"
 } > /dev/null 2>&1
 check_error "Настройка Grafana"
 
+# 12. Замена шаблона nginx для Hestia CP
+echo -e "${YELLOW}=== Замена шаблона nginx ===${NC}"
+cat > /usr/local/hestia/data/templates/web/nginx/php-fpm/default.tpl <<'EOF'
+#
+# TC Nginx+Apache
+# v 1.01
+#
+
+server {
+	listen      %ip%:%proxy_port%;
+	server_name %domain_idn% %alias_idn%;
+	error_log   /var/log/%web_system%/domains/%domain%.error.log error;
+
+	include %home%/%user%/conf/web/%domain%/nginx.forcessl.conf*;
+
+	location = /favicon.ico {
+		log_not_found off;
+		access_log off;
+	}
+
+	location ~ /\.(?!well-known\/|file) {
+		deny all;
+		return 404;
+	}
+
+	location ~ ^/wp-content/cache { deny all; }
+
+	location / {
+		proxy_pass https://%ip%:%web_ssl_port%;
+
+		location ~* ^.+\.(ogg|ogv|svg|svgz|swf|eot|otf|woff|woff2|mov|mp3|mp4|webm|flv|ttf|rss|atom|jpg|jpeg|gif|png|webp|ico|bmp|mid|midi|wav|rtf|css|js|jar|json|cur|3gp|av1|avi|doc|docx|pdf|txt|xls|xlsx|apk)$ {
+			try_files $uri =404;
+
+			root       %sdocroot%;
+			access_log /var/log/nginx/domains/%domain%.log combined;
+			access_log /var/log/nginx/domains/%domain%.bytes bytes;
+
+			expires    max;
+		}
+
+		location ~* /(?:uploads|files)/.*.php$ {
+			deny all;
+			return 404;
+		}
+
+	}
+
+	location /error/ {
+	      alias %home%/%user%/web/%domain%/document_errors/;
+	}
+
+	location ~* (debug\.log|readme\.html|license\.txt|xmlrpc\.php|nginx\.conf)$ {
+		return 404;
+	}
+
+	location /wthme/ {
+		rewrite ^/wthme/(.*)$ /wp-content/plugins/hb_waf/themes/$1 last;
+	}
+
+	proxy_hide_header Upgrade;
+
+	include %home%/%user%/conf/web/%domain%/nginx.conf_*;
+	include %sdocroot%/ngin*.conf;
+}
+EOF
+check_error "Замена шаблона nginx"
+
 # 13. Завершение установки
 echo -e "${YELLOW}=== Установка завершена ===${NC}"
 echo -e "${GREEN}Доступные сервисы:${NC}"
@@ -561,6 +617,6 @@ echo -e "Prometheus:   http://$(hostname -I | awk '{print $1}'):9090"
 echo -e "Loki:         http://$(hostname -I | awk '{print $1}'):3100"
 echo -e "Pushgateway:  http://$(hostname -I | awk '{print $1}'):9091"
 echo -e "\n${GREEN}Данные для входа:${NC}"
-echo -e "Hestia CP:  Trafficadmin / (пароль из файла /usr/local/hestia/data/users/admin/password.conf)"
+echo -e "Hestia CP:  admin / (пароль из файла /usr/local/hestia/data/users/admin/password.conf)"
 echo -e "Grafana:    admin / admin"
 echo -e "\n${RED}ВАЖНО: Измените пароли по умолчанию${NC}"
