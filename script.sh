@@ -242,10 +242,10 @@ After=network.target
 User=prometheus
 Group=prometheus
 Type=simple
-ExecStart=/usr/local/bin/prometheus \
-    --config.file=/etc/prometheus/prometheus.yml \
-    --storage.tsdb.path=/var/lib/prometheus \
-    --web.listen-address=0.0.0.0:9090 \
+ExecStart=/usr/local/bin/prometheus \\
+    --config.file=/etc/prometheus/prometheus.yml \\
+    --storage.tsdb.path=/var/lib/prometheus \\
+    --web.listen-address=0.0.0.0:9090 \\
     --web.enable-lifecycle
 
 Restart=always
@@ -308,7 +308,7 @@ After=network.target
 [Service]
 User=pushgateway
 Group=pushgateway
-ExecStart=/usr/local/bin/pushgateway \
+ExecStart=/usr/local/bin/pushgateway \\
     --web.listen-address=:9091
 
 [Install]
@@ -541,20 +541,43 @@ echo -e "${YELLOW}=== Настройка Grafana ===${NC}"
 } > /dev/null 2>&1
 check_error "Настройка Grafana"
 
-# 12. Замена шаблона nginx для Hestia CP
-echo -e "${YELLOW}=== Замена шаблона nginx ===${NC}"
-cat > /usr/local/hestia/data/templates/web/nginx/php-fpm/default.tpl <<'EOF'
+# 12. Обновление шаблона Nginx для Hestia CP
+echo -e "${YELLOW}=== Обновление шаблона Nginx ===${NC}"
+{
+    TPL_FILE="/usr/local/hestia/data/templates/web/nginx/php-fpm/default.tpl"
+    
+    # Проверяем существование файла
+    if [ ! -f "$TPL_FILE" ]; then
+        echo -e "${RED}Файл шаблона не найден: $TPL_FILE${NC}"
+        exit 1
+    fi
+    
+    # Создаем резервную копию
+    cp "$TPL_FILE" "${TPL_FILE}.backup"
+    check_error "Создание резервной копии шаблона"
+    
+    # Записываем новое содержимое
+    cat > "$TPL_FILE" <<'EOF'
 #
 # TC Nginx+Apache
 # v 1.01
 #
 
 server {
-	listen      %ip%:%proxy_port%;
+	listen      %ip%:%proxy_ssl_port% ssl;
 	server_name %domain_idn% %alias_idn%;
 	error_log   /var/log/%web_system%/domains/%domain%.error.log error;
 
-	include %home%/%user%/conf/web/%domain%/nginx.forcessl.conf*;
+	ssl_certificate     %ssl_pem%;
+	ssl_certificate_key %ssl_key%;
+	ssl_stapling        on;
+	ssl_stapling_verify on;
+
+	# TLS 1.3 0-RTT anti-replay
+	if ($anti_replay = 307) { return 307 https://$host$request_uri; }
+	if ($anti_replay = 425) { return 425; }
+
+	include %home%/%user%/conf/web/%domain%/nginx.hsts.conf*;
 
 	location = /favicon.ico {
 		log_not_found off;
@@ -589,7 +612,7 @@ server {
 	}
 
 	location /error/ {
-	      alias %home%/%user%/web/%domain%/document_errors/;
+		alias %home%/%user%/web/%domain%/document_errors/;
 	}
 
 	location ~* (debug\.log|readme\.html|license\.txt|xmlrpc\.php|nginx\.conf)$ {
@@ -602,11 +625,15 @@ server {
 
 	proxy_hide_header Upgrade;
 
-	include %home%/%user%/conf/web/%domain%/nginx.conf_*;
+	include %home%/%user%/conf/web/%domain%/nginx.ssl.conf_*;
 	include %sdocroot%/ngin*.conf;
 }
 EOF
-check_error "Замена шаблона nginx"
+    
+    echo -e "${GREEN}Шаблон Nginx успешно обновлен${NC}"
+    echo -e "${BLUE}Резервная копия сохранена как: ${TPL_FILE}.backup${NC}"
+}
+check_error "Обновление шаблона Nginx"
 
 # 13. Завершение установки
 echo -e "${YELLOW}=== Установка завершена ===${NC}"
