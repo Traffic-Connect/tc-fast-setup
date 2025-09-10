@@ -552,7 +552,7 @@ echo -e "${YELLOW}=== Настройка Grafana ===${NC}"
 } > /dev/null 2>&1
 check_error "Настройка Grafana"
 
-# 13. Настройка шаблона Nginx для TC Nginx+Apache
+# 13. Настройка шаблона Nginx для TC Nginx
 echo -e "${YELLOW}=== Настройка шаблона Nginx для TC Nginx+Apache ===${NC}"
 {
     cat > /usr/local/hestia/data/templates/web/nginx/php-fpm/default.tpl <<'EOF'
