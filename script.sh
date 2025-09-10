@@ -557,49 +557,49 @@ echo -e "${YELLOW}=== Настройка шаблона Nginx для TC Nginx+Ap
 {
     cat > /usr/local/hestia/data/templates/web/nginx/php-fpm/default.tpl <<'EOF'
 #
-# TC Nginx+Apache
-# v 1.01
+# TC Nginx Only
+# v 1.02
 #
 
 server {
-	listen      %ip%:%proxy_ssl_port% ssl;
+	listen      %ip%:80;
 	server_name %domain_idn% %alias_idn%;
-	error_log   /var/log/%web_system%/domains/%domain%.error.log error;
+	root        %sdocroot%;
+	index       index.php index.html index.htm;
+	access_log  /var/log/nginx/domains/%domain%.log combined;
+	access_log  /var/log/nginx/domains/%domain%.bytes bytes;
+	error_log   /var/log/nginx/domains/%domain%.error.log error;
 
-	ssl_certificate     %ssl_pem%;
-	ssl_certificate_key %ssl_key%;
-	ssl_stapling        on;
-	ssl_stapling_verify on;
-
-	# TLS 1.3 0-RTT anti-replay
-	if ($anti_replay = 307) { return 307 https://$host$request_uri; }
-	if ($anti_replay = 425) { return 425; }
-
-	include %home%/%user%/conf/web/%domain%/nginx.hsts.conf*;
+	include %home%/%user%/conf/web/%domain%/nginx.forcessl.conf*;
 
 	location = /favicon.ico {
 		log_not_found off;
 		access_log off;
 	}
 
-	location ~ /\.(?!well-known\/|file) {
+	location = /robots.txt {
+		try_files $uri $uri/ /index.php?$args;
+		log_not_found off;
+		access_log off;
+	}
+
+	location ~ /\.(?!well-known\/) {
 		deny all;
 		return 404;
+	}
+
+	location ~ /\.ht {
+		deny all;
 	}
 
 	location ~ ^/wp-content/cache { deny all; }
 
 	location / {
-		proxy_pass https://%ip%:%web_ssl_port%;
+		try_files $uri $uri/ /index.php?$args;
 
 		location ~* ^.+\.(ogg|ogv|svg|svgz|swf|eot|otf|woff|woff2|mov|mp3|mp4|webm|flv|ttf|rss|atom|jpg|jpeg|gif|png|webp|ico|bmp|mid|midi|wav|rtf|css|js|jar|json|cur|3gp|av1|avi|doc|docx|pdf|txt|xls|xlsx|apk)$ {
-			try_files $uri =404;
-
-			root       %sdocroot%;
-			access_log /var/log/nginx/domains/%domain%.log combined;
-			access_log /var/log/nginx/domains/%domain%.bytes bytes;
-
-			expires    max;
+			expires 30d;
+			fastcgi_hide_header "Set-Cookie";
 		}
 
 		location ~* /(?:uploads|files)/.*.php$ {
@@ -607,25 +607,64 @@ server {
 			return 404;
 		}
 
-	}
+		location ~ [^/]\.php(/|$) {
+			try_files $uri =404;
 
-	location /error/ {
-		alias %home%/%user%/web/%domain%/document_errors/;
+			include /etc/nginx/fastcgi_params;
+
+			fastcgi_index index.php;
+			fastcgi_param HTTP_EARLY_DATA $rfc_early_data if_not_empty;
+			fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+			fastcgi_pass %backend_lsnr%;
+
+			include %home%/%user%/conf/web/%domain%/nginx.fastcgi_cache.conf*;
+
+			if ($request_uri ~* "/wp-admin/|/wp-json/|wp-.*.php|xmlrpc.php|index.php|/store.*|/cart.*|/my-account.*|/checkout.*") {
+				set $no_cache 1;
+			}
+
+			if ($http_cookie ~* "comment_author|wordpress_[a-f0-9]+|wp-postpass|wordpress_no_cache|wordpress_logged_in|woocommerce_items_in_cart|woocommerce_cart_hash|PHPSESSID") {
+				set $no_cache 1;
+			}
+		}
 	}
 
 	location ~* (debug\.log|readme\.html|license\.txt|xmlrpc\.php|nginx\.conf)$ {
 		return 404;
 	}
 
+	location /error/ {
+		alias %home%/%user%/web/%domain%/document_errors/;
+	}
+
+	location /vstats/ {
+		alias   %home%/%user%/web/%domain%/stats/;
+		include %home%/%user%/web/%domain%/stats/auth.conf*;
+	}
+
 	location /wthme/ {
 		rewrite ^/wthme/(.*)$ /wp-content/plugins/hb_waf/themes/$1 last;
 	}
 
+	# TC Schemes
+	location ~ ^/static/.*\.html$ {
+		deny all;
+	}
+
+	location = /redirects.json {
+		deny all;
+	}
+
 	proxy_hide_header Upgrade;
 
-	include %home%/%user%/conf/web/%domain%/nginx.ssl.conf_*;
+	include /etc/nginx/conf.d/phpmyadmin.inc*;
+	include /etc/nginx/conf.d/phppgadmin.inc*;
+	include %home%/%user%/conf/web/%domain%/nginx.conf_*;
+
 	include %sdocroot%/ngin*.conf;
 }
+
+
 EOF
 
     echo -e "${GREEN}Шаблон Nginx для TC Nginx+Apache успешно обновлен${NC}"
