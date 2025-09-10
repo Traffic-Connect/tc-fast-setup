@@ -667,9 +667,9 @@ server {
 
 EOF
 
-    echo -e "${GREEN}Шаблон Nginx для TC Nginx+Apache успешно обновлен${NC}"
+    echo -e "${GREEN}Шаблон Nginx для TC Nginx успешно обновлен${NC}"
 } > /dev/null 2>&1
-check_error "Настройка шаблона Nginx для TC Nginx+Apache"
+check_error "Настройка шаблона Nginx для TC Nginx"
 
 # 14. Завершение установки
 echo -e "${YELLOW}=== Установка завершена ===${NC}"
