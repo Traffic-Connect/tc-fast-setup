@@ -66,8 +66,13 @@ clone_or_pull() {
   mkdir -p "$target_dir"
   if [[ -d "$target_dir/.git" ]]; then
     echo "Repository already exists in $target_dir — pulling..."
-    (cd "$target_dir" && if [[ "$use_netrc" == "yes" && -n "$NETRC_USED" ]]; then GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_SSL_NO_VERIFY= false git pull --rebase; else git pull --rebase; fi)
-    return $?
+    if [[ "$use_netrc" == "yes" && -n "$NETRC_USED" ]]; then
+      GIT_TERMINAL_PROMPT=0 GIT_SSL_NO_VERIFY=false git -C "$target_dir" pull --rebase
+      return $?
+    else
+      git -C "$target_dir" pull --rebase
+      return $?
+    fi
   else
     echo "Cloning $repo_url -> $target_dir"
     if [[ "$use_netrc" == "yes" && -n "$NETRC_USED" ]]; then
@@ -113,6 +118,7 @@ run_setup_script() {
 # --- Repositories and actions (по порядку) ---
 # Для приватных репозиториев устанавливай третьим аргументом "yes" (использовать NETRC)
 # Формат: clone_or_pull repo target_dir use_netrc
+
 echo
 echo -e "${BOLD}${BLUE}=== 1) tc-nginx-badbot ===${NC}"
 REPO=https://github.com/Traffic-Connect/tc-nginx-badbot.git
@@ -197,12 +203,78 @@ echo
 echo -e "${BOLD}${BLUE}=== 7) backups-sites ===${NC}"
 REPO=https://github.com/Traffic-Connect/backups-sites.git
 TARGET=/root/backups
+
 mkdir -p "$TARGET"
-if clone_or_pull "$REPO" "$TARGET" "yes"; then
-  run_cmd "chmod +x $TARGET/install.sh" chmod +x "$TARGET/install.sh" || true
-  run_cmd "Run backups install" bash -c "cd $TARGET && ./install.sh"
+if cd "$TARGET"; then
+  git_ok=0
+
+  if [[ -d ".git" ]]; then
+    echo "Repository already exists in $TARGET — pulling..."
+    if [[ -n "$NETRC_USED" ]]; then
+      TMPHOME=$(mktemp -d)
+      cp "$NETRC_USED" "$TMPHOME/.netrc"
+      chmod 600 "$TMPHOME/.netrc"
+      if HOME="$TMPHOME" GIT_TERMINAL_PROMPT=0 git pull --rebase; then
+        status_ok "Updated backups-sites (git pull)"
+      else
+        status_fail "git pull failed for backups-sites"
+        git_ok=1
+      fi
+      rm -rf "$TMPHOME"
+    else
+      if git pull --rebase; then
+        status_ok "Updated backups-sites (git pull)"
+      else
+        status_fail "git pull failed for backups-sites"
+        git_ok=1
+      fi
+    fi
+  else
+    echo "Cloning $REPO into $TARGET (git clone ... .)"
+    if [[ -n "$NETRC_USED" ]]; then
+      TMPHOME=$(mktemp -d)
+      cp "$NETRC_USED" "$TMPHOME/.netrc"
+      chmod 600 "$TMPHOME/.netrc"
+      if HOME="$TMPHOME" GIT_TERMINAL_PROMPT=0 git clone "$REPO" .; then
+        status_ok "Cloned backups-sites"
+      else
+        status_fail "Clone failed for backups-sites"
+        git_ok=1
+      fi
+      rm -rf "$TMPHOME"
+    else
+      if git clone "$REPO" .; then
+        status_ok "Cloned backups-sites"
+      else
+        status_fail "Clone failed for backups-sites"
+        git_ok=1
+      fi
+    fi
+  fi
+
+  # если git-операции прошли успешно, пробуем установить
+  if [[ $git_ok -eq 0 ]]; then
+    if [[ -f "$TARGET/install.sh" ]]; then
+      run_cmd "chmod +x $TARGET/install.sh" chmod +x "$TARGET/install.sh" || true
+
+      echo -e "${BLUE}->${NC} Run backups install (attempt 1)"
+      if bash -c "cd $TARGET && ./install.sh"; then
+        status_ok "Run backups install (attempt 1)"
+      else
+        echo -e "${RED}backups install attempt 1 failed, retrying once...${NC}"
+        echo -e "${BLUE}->${NC} Run backups install (attempt 2)"
+        if bash -c "cd $TARGET && ./install.sh"; then
+          status_ok "Run backups install (attempt 2, succeeded after failure)"
+        else
+          status_fail "backups install failed after 2 attempts"
+        fi
+      fi
+    else
+      status_fail "install.sh not found in $TARGET"
+    fi
+  fi
 else
-  status_fail "Clone/pull failed for backups-sites"
+  status_fail "Cannot cd into $TARGET for backups-sites"
 fi
 
 # cleanup temporary netrc
