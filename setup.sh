@@ -141,60 +141,9 @@ check_error "Установка Hestia CP"
 
 # 4. Настройка iptables с ограничениями доступа
 echo -e "${YELLOW}=== Настройка firewall ===${NC}"
-iptables -F && iptables -X
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT ACCEPT
 
-# Базовые правила
-iptables -A INPUT -i lo -j ACCEPT
-iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+source "./fw.sh"
 
-# Разрешение HTTP/HTTPS для всех
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-iptables -A INPUT -p tcp --dport 8083 -j ACCEPT
-
-# Разрешение Cloudflare IPs
-echo -e "${BLUE}Добавление правил для Cloudflare...${NC}"
-for ip in $(curl -s https://www.cloudflare.com/ips-v4); do
-    iptables -A INPUT -p tcp -s "$ip" --dport 80 -j ACCEPT
-    iptables -A INPUT -p tcp -s "$ip" --dport 443 -j ACCEPT
-done
-
-# Разрешение SSH (22) для всех
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-
-# Разрешение доступа ко всем сервисным портам только для указанных IP
-ALL_SERVICE_PORTS="3000 9080 9191 9091 3306 5432 8080 25 465 587 993 995 143 110 53"
-for port in $ALL_SERVICE_PORTS; do
-    # Разрешаем доступ с VPN и сервера статистики
-    iptables -A INPUT -p tcp -s 188.68.219.28 --dport $port -j ACCEPT
-    iptables -A INPUT -p tcp -s 172.235.190.62 --dport $port -j ACCEPT
-    # Запрещаем доступ для всех остальных
-    iptables -A INPUT -p tcp --dport $port -j DROP
-done
-
-# Разрешение DNS UDP только для локальных запросов
-iptables -A INPUT -p udp -s 127.0.0.1 --dport 53 -j ACCEPT
-iptables -A INPUT -p udp --dport 53 -j DROP
-
-# Защита от атак
-iptables -N SYN_FLOOD
-iptables -A INPUT -p tcp --syn -j SYN_FLOOD
-iptables -A SYN_FLOOD -m limit --limit 10/s --limit-burst 25 -j RETURN
-iptables -A SYN_FLOOD -j DROP
-
-iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
-iptables -A INPUT -p icmp --icmp-type echo-request -j DROP
-
-# Защита от портовых сканеров
-iptables -N PORT_SCAN
-iptables -A INPUT -p tcp --tcp-flags SYN,ACK,FIN,RST RST -j PORT_SCAN
-iptables -A PORT_SCAN -m limit --limit 1/s -j RETURN
-iptables -A PORT_SCAN -j DROP
-
-netfilter-persistent save
 check_error "Настройка firewall"
 
 # 5. Настройка fail2ban
