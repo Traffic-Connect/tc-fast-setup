@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Сброс и базовая настройка правил
 iptables -F
 iptables -X
@@ -33,7 +33,7 @@ iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 # Блокировка плохих User-Agent'ов (Cloudflare и другие)
 BAD_AGENTS_URLS=(
     "https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/_generator_lists/bad-user-agents.list"
-    "https://github.com/mitchellkrogza/apache-ultimate-bad-bot-blocker/blob/master/_generator_lists/bad-user-agents.list"
+    "https://raw.githubusercontent.com/mitchellkrogza/apache-ultimate-bad-bot-blocker/refs/heads/master/_generator_lists/bad-user-agents.list"
 )
 
 # Создаем временный файл
@@ -72,7 +72,6 @@ echo "Разрешаем IP-адреса Cloudflare..."
 for ip in $(curl -s https://www.cloudflare.com/ips-v4); do
     iptables -A INPUT -p tcp -s "$ip" --dport 80 -j ACCEPT
     iptables -A INPUT -p tcp -s "$ip" --dport 443 -j ACCEPT
-    echo "Разрешён IP Cloudflare: $ip"
 done
 
 for ip in $(curl -s https://www.cloudflare.com/ips-v6); do
@@ -102,7 +101,6 @@ if [ -s "$GOOGLE_IPS_FILE" ]; then
         [ -z "$ip" ] && continue  # Пропускаем пустые строки
         iptables -A INPUT -p tcp -s "$ip" --dport 80 -j ACCEPT
         iptables -A INPUT -p tcp -s "$ip" --dport 443 -j ACCEPT
-        echo "Разрешён IP Google: $ip"
     done < "$GOOGLE_IPS_FILE"
     echo "Добавлено $(wc -l < "$GOOGLE_IPS_FILE") правил для IP-адресов Google"
 else
@@ -133,6 +131,3 @@ fi
 # Очистка временных файлов
 [ -f "$BAD_AGENTS_FILE" ] && rm -f "$BAD_AGENTS_FILE"
 [ -f "$GOOGLE_IPS_FILE" ] && rm -f "$GOOGLE_IPS_FILE"
-
-# Вывод текущих правил
-iptables -L -n -v
