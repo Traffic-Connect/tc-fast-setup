@@ -10,6 +10,16 @@ iptables -P OUTPUT ACCEPT
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
+# Разрешение HTTP/HTTPS для всех
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -p tcp --dport 8083 -j ACCEPT
+
+# Защита SSH
+iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --set --name SSH
+iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 4 --name SSH -j DROP
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+
 # Защита от SYN-флуда и порт-сканирования
 iptables -N SYN_FLOOD
 iptables -A SYN_FLOOD -m limit --limit 10/second --limit-burst 25 -j RETURN
@@ -24,11 +34,6 @@ iptables -A INPUT -p tcp --tcp-flags SYN,ACK,FIN,RST RST -j PORT_SCAN
 # Ограничение ICMP
 iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
 iptables -A INPUT -p icmp --icmp-type echo-request -j DROP
-
-# Защита SSH
-iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --set --name SSH
-iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 4 --name SSH -j DROP
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 
 # Блокировка плохих User-Agent'ов (Cloudflare и другие)
 BAD_AGENTS_URLS=(
@@ -110,7 +115,7 @@ fi
 # Открываем необходимые порты
 SERVICE_PORTS="8083 8080 25 465 587 993 995 143 110 53 3000 9090 9100 3100 9080 9191 9091 9200"
 for port in $SERVICE_PORTS; do
-    iptables -A INPUT -p tcp --dport $port -j ACCEPT
+    iptables -A INPUT -p tcp --dport "$port" -j ACCEPT
     echo "Открыт порт: $port/tcp"
 done
 
