@@ -59,17 +59,23 @@ timedatectl set-timezone Europe/Moscow
 
 # 2. Обновление системы и установка базовых пакетов
 echo -e "${YELLOW}=== Установка базовых пакетов ===${NC}"
-apt update && apt upgrade -y
-DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-      apt install -y \
-      fail2ban iptables-persistent \
-      netfilter-persistent curl wget \
-      software-properties-common \
-      apt-transport-https python3 \
-      python3-pip python3-venv git \
-      gnupg2 ca-certificates \
-      adduser libfontconfig1 \
-      unzip ncdu htop
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+sudo -E apt update -y --allow-releaseinfo-change-label && \
+  sudo -E apt upgrade -y && \
+  sudo -E apt install -y \
+  build-essential \
+  fail2ban iptables-persistent \
+  netfilter-persistent curl wget \
+  software-properties-common \
+  apt-transport-https python3 \
+  python3-pip python3-venv git \
+  python3-psutil python3-prometheus-client \
+  gnupg2 ca-certificates \
+  adduser libfontconfig1 \
+  unzip ncdu htop \
+  libpcre3 libpcre3-dev \
+  zlib1g-dev libssl-dev
 check_error "Установка базовых пакетов"
 
 # 3. Установка Hestia CP
@@ -414,11 +420,23 @@ cd
 rm -rf /tmp/nginx_tune
 check_error "Установка NGINX Tune & Limits Automation"
 
-# 9. Завершение установки
+# 9. Настройка мониторинга
+echo -e "${YELLOW}=== Настройка мониторинга ===${NC}"
+source "./tc-fast-setup/monitoring.sh"
+check_error "Настройка мониторинга"
+
+# 10. Завершение установки
+HOST_IP=$(hostname -I | awk '{print $1}')
 echo -e "${YELLOW}=== Установка завершена ===${NC}"
+echo -e "Сервер: ${SERVER_HOSTNAME} - IP: ${HOST_IP}"
 echo -e "${GREEN}Доступные сервисы:${NC}"
 echo -e "Hestia CP:  http://$(hostname -I | awk '{print $1}'):8083"
 echo -e "\n${GREEN}Данные для входа:${NC}"
 echo -e "Hestia CP:  Trafficadmin / $(cat "$TRAFFICADMIN_PASS_FILE")"
 echo -e "Hestia CP:  administrator / $(cat "$ADMINISTRATOR_PASS_FILE")"
 echo -e "\n${RED}ВАЖНО: Перезагрузите сервер с помощью команды reboot${NC}"
+echo -e "${YELLOW}Используйте команды ниже для добавления этого сервера в мониторинг:"
+echo -e "${YELLOW}На сервере, где установлен Prometheus:"
+echo "/opt/prometheus/add_prometheus_target.sh node_exporter ${HOST_IP} 9100 $(hostname)"
+echo "/opt/prometheus/add_prometheus_target.sh process_exporter ${HOST_IP} 9109 $(hostname)"
+echo "/opt/prometheus/add_prometheus_target.sh nginx_vts ${HOST_IP} 8088 $(hostname) /status"
