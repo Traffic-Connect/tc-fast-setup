@@ -113,7 +113,7 @@ else
 fi
 
 # Открываем необходимые порты
-SERVICE_PORTS="8083 8080 25 465 587 993 995 143 110 53 3000 9090 9100 3100 9080 9191 9091 9200"
+SERVICE_PORTS="8083 8080 25 465 587 993 995 143 110 53 3000 9090 9100 9109 3100 9080 9191 9091 9200"
 for port in $SERVICE_PORTS; do
     iptables -A INPUT -p tcp --dport "$port" -j ACCEPT
     echo "Открыт порт: $port/tcp"
