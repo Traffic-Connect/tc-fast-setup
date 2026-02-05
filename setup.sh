@@ -458,12 +458,12 @@ echo -e "${YELLOW}=== Установка bootstrap-tc software ===${NC}"
 source "./tc-fast-setup/bootstrap-tc.sh"
 check_error "Установка bootstrap-tc software"
 
-# 9. Настройка мониторинга
+# 10. Настройка мониторинга
 echo -e "${YELLOW}=== Настройка мониторинга ===${NC}"
 source "./tc-fast-setup/monitoring.sh"
 check_error "Настройка мониторинга"
 
-# 10. Завершение установки
+# 11. Завершение установки
 HOST_IP=$(hostname -I | awk '{print $1}')
 echo -e "${YELLOW}=== Установка завершена ===${NC}"
 echo -e "Сервер: ${SERVER_HOSTNAME} - IP: ${HOST_IP}"
