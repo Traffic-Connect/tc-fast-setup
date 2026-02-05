@@ -31,36 +31,47 @@ GIT_TOKEN=""
 # --- Функция для вывода ошибки и выхода ---
 error_exit() {
     echo "Ошибка: $1" >&2
-    echo "Использование: $0 --server-hostname HOSTNAME [--git-user USER --git-token TOKEN]" >&2
+    echo "Использование: $0 --server-hostname HOSTNAME --git-user USER --git-token TOKEN" >&2
     exit 1
+}
+
+check_github_token() {
+    echo "Проверка валидности GitHub токена..."
+
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: token $GIT_TOKEN" \
+        https://api.github.com/user)
+
+    case "$http_code" in
+        200)
+            echo "GitHub токен валиден ✅"
+            ;;
+        401)
+            error_exit "GitHub токен недействителен или истёк"
+            ;;
+        *)
+            error_exit "Ошибка проверки GitHub токена (HTTP $http_code)"
+            ;;
+    esac
 }
 
 # --- Парсинг параметров ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --server-hostname)
-            if [[ -n "${2-}" && ! "$2" =~ ^-- ]]; then
-                SERVER_HOSTNAME="$2"
-                shift 2
-            else
-                error_exit "Флаг --server-hostname требует аргумент"
-            fi
+            [[ -n "${2-}" && ! "$2" =~ ^-- ]] || error_exit "Флаг --server-hostname требует аргумент"
+            SERVER_HOSTNAME="$2"
+            shift 2
             ;;
         --git-user)
-            if [[ -n "${2-}" && ! "$2" =~ ^-- ]]; then
-                GIT_USER="$2"
-                shift 2
-            else
-                error_exit "Флаг --git-user требует аргумент"
-            fi
+            [[ -n "${2-}" && ! "$2" =~ ^-- ]] || error_exit "Флаг --git-user требует аргумент"
+            GIT_USER="$2"
+            shift 2
             ;;
         --git-token)
-            if [[ -n "${2-}" && ! "$2" =~ ^-- ]]; then
-                GIT_TOKEN="$2"
-                shift 2
-            else
-                error_exit "Флаг --git-token требует аргумент"
-            fi
+            [[ -n "${2-}" && ! "$2" =~ ^-- ]] || error_exit "Флаг --git-token требует аргумент"
+            GIT_TOKEN="$2"
+            shift 2
             ;;
         *)
             error_exit "Неизвестный параметр: $1"
@@ -68,17 +79,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# --- Проверка обязательного параметра ---
-if [[ -z "$SERVER_HOSTNAME" ]]; then
-    error_exit "--server-hostname обязателен"
-fi
+# --- Обязательные параметры ---
+[[ -n "$SERVER_HOSTNAME" ]] || error_exit "Не указан --server-hostname"
+[[ -n "$GIT_USER" ]]        || error_exit "Не указан --git-user"
+[[ -n "$GIT_TOKEN" ]]       || error_exit "Не указан --git-token"
 
-# --- Проверка согласованности git creds ---
-if [[ -n "$GIT_USER" && -z "$GIT_TOKEN" ]]; then
-    error_exit "Указан --git-user, но не указан --git-token"
-elif [[ -z "$GIT_USER" && -n "$GIT_TOKEN" ]]; then
-    error_exit "Указан --git-token, но не указан --git-user"
-fi
+# --- Проверка токена GitHub ---
+check_github_token
 
 # 1. Очистка системы
 echo -e "${YELLOW}=== Очистка системы ===${NC}"
