@@ -460,6 +460,7 @@ check_error "Установка bootstrap-tc software"
 
 # 10. Настройка мониторинга
 echo -e "${YELLOW}=== Настройка мониторинга ===${NC}"
+cd
 source "./tc-fast-setup/monitoring.sh"
 check_error "Настройка мониторинга"
 
