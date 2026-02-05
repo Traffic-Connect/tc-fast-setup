@@ -200,7 +200,7 @@ else
   rm -rf /tmp/nginx-vts && mkdir -p /tmp/nginx-vts && cd /tmp/nginx-vts
   NGINX_VERSION=$(nginx -v 2>&1 | awk -F/ '{print $2}')
   wget "http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz"
-  tar -zxvf "nginx-${NGINX_VERSION}.tar.gz"
+  tar -zxf "nginx-${NGINX_VERSION}.tar.gz"
   git clone https://github.com/vozlt/nginx-module-vts.git
 
   cd "nginx-${NGINX_VERSION}"
