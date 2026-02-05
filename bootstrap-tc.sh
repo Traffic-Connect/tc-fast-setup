@@ -19,13 +19,8 @@ exec > >(tee -a "$LOG") 2>&1
 
 echo -e "${BOLD}${BLUE}=== START bootstrap: $(date -Iseconds) ===${NC}"
 
-# --- prompt for credentials (for private repos) ---
-read -rp "Если нужны приватные репо: введите Git username (оставьте пустым если не нужно): " GIT_USER
-if [[ -n "$GIT_USER" ]]; then
-  # use -s for silent token input
-  read -rsp "Введите Git token / пароль (ввод скрыт): " GIT_TOKEN
-  echo
-  # create temporary ~/.netrc for github.com
+# --- create temporary netrc if credentials provided ---
+if [[ -n "$GIT_USER" && -n "$GIT_TOKEN" ]]; then
   NETRC_FILE="$HOME/.netrc.tc_tmp"
   cat > "$NETRC_FILE" <<EOF
 machine github.com
@@ -33,7 +28,7 @@ login $GIT_USER
 password $GIT_TOKEN
 EOF
   chmod 600 "$NETRC_FILE"
-  export GIT_ASKPASS="" # prevent git asking interactively
+  export GIT_ASKPASS=""      # prevent git asking interactively
   export NETRC_USED="$NETRC_FILE"
   echo "Created temporary netrc for github.com -> $NETRC_FILE"
 else

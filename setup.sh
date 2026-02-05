@@ -23,28 +23,61 @@ check_error() {
     fi
 }
 
-# Парсинг параметров
+# --- Инициализация переменных ---
 SERVER_HOSTNAME=""
+GIT_USER=""
+GIT_TOKEN=""
 
+# --- Функция для вывода ошибки и выхода ---
+error_exit() {
+    echo "Ошибка: $1" >&2
+    echo "Использование: $0 --server-hostname HOSTNAME [--git-user USER --git-token TOKEN]" >&2
+    exit 1
+}
+
+# --- Парсинг параметров ---
 while [[ $# -gt 0 ]]; do
-  case $1 in
-    --server-hostname)
-      SERVER_HOSTNAME="$2"
-      shift 2
-      ;;
-    *)
-      echo "Неизвестный параметр: $1"
-      echo "Использование: $0 --server-hostname HOSTNAME"
-      exit 1
-      ;;
-  esac
+    case "$1" in
+        --server-hostname)
+            if [[ -n "${2-}" && ! "$2" =~ ^-- ]]; then
+                SERVER_HOSTNAME="$2"
+                shift 2
+            else
+                error_exit "Флаг --server-hostname требует аргумент"
+            fi
+            ;;
+        --git-user)
+            if [[ -n "${2-}" && ! "$2" =~ ^-- ]]; then
+                GIT_USER="$2"
+                shift 2
+            else
+                error_exit "Флаг --git-user требует аргумент"
+            fi
+            ;;
+        --git-token)
+            if [[ -n "${2-}" && ! "$2" =~ ^-- ]]; then
+                GIT_TOKEN="$2"
+                shift 2
+            else
+                error_exit "Флаг --git-token требует аргумент"
+            fi
+            ;;
+        *)
+            error_exit "Неизвестный параметр: $1"
+            ;;
+    esac
 done
 
-# Проверка, что hostname задан
-if [ -z "$SERVER_HOSTNAME" ]; then
-    echo "Ошибка: не указан --server-hostname"
-    echo "Пример использования: $0 --server-hostname T0-HOSTNAME"
-    exit 1
+# --- Проверка обязательного параметра ---
+if [[ -z "$SERVER_HOSTNAME" ]]; then
+    error_exit "--server-hostname обязателен"
+fi
+
+# --- Проверка согласованности git creds ---
+if [[ -n "$GIT_USER" && -z "$GIT_TOKEN" ]]; then
+    error_exit "Указан --git-user, но не указан --git-token"
+elif [[ -z "$GIT_USER" && -n "$GIT_TOKEN" ]]; then
+    error_exit "Указан --git-token, но не указан --git-user"
 fi
 
 # 1. Очистка системы
@@ -419,6 +452,11 @@ chmod +x nginx_conf.sh
 cd
 rm -rf /tmp/nginx_tune
 check_error "Установка NGINX Tune & Limits Automation"
+
+# 9. Установка bootstrap-tc software
+echo -e "${YELLOW}=== Установка bootstrap-tc software ===${NC}"
+source "./tc-fast-setup/bootstrap-tc.sh"
+check_error "Установка bootstrap-tc software"
 
 # 9. Настройка мониторинга
 echo -e "${YELLOW}=== Настройка мониторинга ===${NC}"
