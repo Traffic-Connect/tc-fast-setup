@@ -1,4 +1,4 @@
-# 🚀 Автоматизация сервера: HestiaCP, Grafana, Prometheus, Loki, Fail2Ban, Firewall
+# 🚀 Автоматизация сервера: HestiaCP, Fail2Ban, Firewall, Monitoring
 
 > **Универсальный Bash-скрипт для быстрого развёртывания и настройки современной серверной инфраструктуры мониторинга и управления на Ubuntu/Debian.**
 
@@ -8,8 +8,7 @@
 
 Этот скрипт автоматически устанавливает и настраивает:
 - [HestiaCP](https://hestiacp.com/) — удобная панель управления сервером
-- [Grafana](https://grafana.com/), [Prometheus](https://prometheus.io/), [Node Exporter](https://prometheus.io/docs/guides/node-exporter/), [Pushgateway](https://prometheus.io/docs/practices/pushing/) — инструменты мониторинга
-- [Loki](https://grafana.com/oss/loki/) и [Promtail](https://grafana.com/docs/loki/latest/clients/promtail/) — сбор и просмотр логов
+- [Node Exporter](https://prometheus.io/docs/guides/node-exporter/), Process Exporter, [NGINX VTS](https://learn.netdata.cloud/docs/collecting-metrics/web-servers-and-web-proxies/nginx-vts) — инструменты мониторинга
 - [Fail2Ban](https://www.fail2ban.org/) — защита от брутфорса и бот-атак
 - Firewall (iptables) — базовая защита сервера
 
@@ -20,17 +19,16 @@
 ## 🧩 Функционал
 
 1. **Проверка root-доступа**
-2. **Удаление старых версий Grafana (если были)**
-3. **Установка системных и дополнительных пакетов**
-4. **Установка HestiaCP**
-5. **Настройка и активация iptables firewall**
-6. **Установка и настройка Fail2Ban**
-7. **Установка Grafana**
-8. **Установка Prometheus, Node Exporter, Pushgateway**
-9. **Установка Loki и Promtail**
-10. **Экспортер метрик Fail2Ban для Prometheus**
-11. **Автоматическая настройка и импорт дашбордов в Grafana**
-12. **Вывод информации по доступу ко всем сервисам**
+2. **Установка системных и дополнительных пакетов**
+3. **Установка HestiaCP**
+4. **Настройка и активация iptables firewall**
+5. **Установка и настройка Fail2Ban**
+6. **Настройка шаблона Nginx для TC Nginx**
+7. **Настройка шаблона Nginx для Proxy IP**
+8. **Установка NGINX Tune & Limits Automation**
+9. **Установка bootstrap-tc software**
+10. **Настройка мониторинга**
+11. **Вывод информации по доступу ко всем сервисам**
 
 ---
 
@@ -38,29 +36,25 @@
 
 1. **Скопируйте или скачайте скрипт на сервер:**
     ```bash
-    git clone https://github.com/Traffic-Connect/tc-fast-setup .
-    chmod +x script.sh
+    mkdir tc-fast-setup && git clone -b v2.0 https://github.com/Traffic-Connect/tc-fast-setup.git tc-fast-setup && cd tc-fast-setup
+    chmod +x setup.sh fw.sh monitoring.sh bootstrap-tc.sh
     ```
 
 2. **Запустите скрипт с правами root:**
     ```bash
-    sudo ./script.sh
+    sudo ./setup.sh --server-hostname T0-TEST1 --git-user git-user --git-token git-token
     ```
 
 3. **Дождитесь завершения работы.**
    - Весь процесс занимает 10–30 минут, в зависимости от мощности сервера и скорости сети.
 
-4. **После завершения вы получите ссылки и логины для всех сервисов в консоли.**
+4. **После завершения вы получите ссылки и логины для всех сервисов в консоли, а также команды для добавления сервера в централизованный мониторинг**
 
 ---
 
 ## 🖥️ Получаемые сервисы
 
 - **HestiaCP:** `http://<your_server_ip>:8083`
-- **Grafana:** `http://<your_server_ip>:3000`
-- **Prometheus:** `http://<your_server_ip>:9090`
-- **Loki:** `http://<your_server_ip>:3100`
-- **Pushgateway:** `http://<your_server_ip>:9091`
 
 > Пароль от HestiaCP (admin) находится в файле:  
 > `/usr/local/hestia/data/users/admin/password.conf`  
@@ -84,22 +78,18 @@
 - Поддерживаемые системы: **Ubuntu 22.04+, Debian 10+** (рекомендуется использовать свежую LTS версию)
 - Права root (`sudo`)
 - Минимум 2 ГБ RAM (рекомендуется 4+ ГБ)
+- Созданный github token для доступа к приватным репозиториям
 
 ---
 
 ## 📦 Список устанавливаемого ПО
 
 - HestiaCP
-- Grafana
-- Prometheus
-- Node Exporter
-- Pushgateway
-- Loki
-- Promtail
 - Fail2Ban
+- Node Exporter
+- Process Exporter
+- NGINX VTS
 - iptables, iptables-persistent
-- Python3, pip и прометей-экспортер для fail2ban
-
 ---
 
 ## 🏁 После установки
@@ -109,12 +99,9 @@
 - Для HestiaCP пароль можно посмотреть так:
     ```bash
     cat /usr/local/hestia/data/users/admin/password.conf
+  # или
+  cat /opt/hestia/.Trafficadmin_pass
     ```
-- Рекомендуется настроить регулярные обновления:
-    ```bash
-    apt update && apt upgrade -y
-    ```
-
 ---
 
 ## 📝 FAQ
