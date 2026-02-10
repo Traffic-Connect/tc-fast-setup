@@ -55,6 +55,48 @@ check_github_token() {
     esac
 }
 
+fix_hestia_nginx() {
+    echo "=== Checking and fixing nginx for Hestia ==="
+
+    # 1️⃣ Остановить системный nginx, если он запущен
+    if systemctl list-unit-files | grep -q "^nginx.service"; then
+        if systemctl is-active --quiet nginx; then
+            echo "System nginx is running. Stopping and disabling it..."
+            systemctl stop nginx
+            systemctl disable nginx
+        else
+            echo "System nginx is installed but not running."
+        fi
+    else
+        echo "System nginx service not found."
+    fi
+
+    # 2️⃣ Раскомментируем строки с портом 8083 в Hestia nginx
+    HESTIA_NGINX_CONF="/usr/local/hestia/nginx/conf/nginx.conf"
+
+    if [ -f "$HESTIA_NGINX_CONF" ]; then
+        echo "Fixing Hestia nginx config (enabling port 8083)..."
+
+        sed -i 's|#\s*listen\s\+8083 ssl;|        listen              8083 ssl;|' "$HESTIA_NGINX_CONF"
+        sed -i 's|#\s*listen\s\+\[::\]:8083 ssl;|        listen              [::]:8083 ssl;|' "$HESTIA_NGINX_CONF"
+
+        # 3️⃣ Проверка конфигурации перед запуском
+        echo "Testing Hestia nginx configuration..."
+        nginx -t -c "$HESTIA_NGINX_CONF"
+        chown "hestiaweb:hestiaweb" "/usr/local/hestia/data/sessions"
+
+        if [ $? -ne 0 ]; then
+            echo "Hestia nginx config test failed! Aborting."
+            exit 1
+        fi
+    else
+        echo "Hestia nginx config not found at $HESTIA_NGINX_CONF"
+    fi
+
+    echo "=== nginx ready for Hestia ==="
+}
+
+
 # --- Парсинг параметров ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -154,6 +196,19 @@ echo -e "${YELLOW}=== Установка Hestia CP ===${NC}"
         sleep 5
         if systemctl is-active --quiet hestia; then
             echo -e "${GREEN}Служба запущена успешно${NC}"
+        elif ! systemctl is-active --quiet hestia; then
+          echo -e "${YELLOW}Служба Hestia не запустилась, пытаемся починить...${NC}"
+          fix_hestia_nginx
+          echo -e "${GREEN}Попробуем снова запустить службу Hestia${NC}"
+          systemctl start hestia
+          sleep 5
+          if systemctl is-active --quiet hestia; then
+            echo -e "${GREEN}Служба запущена успешно после исправления${NC}"
+          else
+            echo -e "${RED}Ошибка запуска службы Hestia даже после исправления${NC}"
+            journalctl -u hestia -n 50 --no-pager
+            exit 1
+          fi
         else
             echo -e "${RED}Ошибка запуска службы${NC}"
             journalctl -u hestia -n 50 --no-pager
